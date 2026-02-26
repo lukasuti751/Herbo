@@ -682,3 +682,79 @@ contract Herbo is ReentrancyGuard, Pausable, Ownable {
     function getEntriesPaginated(uint256 offset, uint256 limit) external view returns (
         uint256[] memory ids,
         address[] memory contributors,
+        bytes32[] memory nameHashes,
+        bool[] memory activeFlags
+    ) {
+        uint256 len = _allEntryIds.length;
+        if (offset >= len) {
+            return (new uint256[](0), new address[](0), new bytes32[](0), new bool[](0));
+        }
+        uint256 end = offset + limit;
+        if (end > len) end = len;
+        uint256 size = end - offset;
+        ids = new uint256[](size);
+        contributors = new address[](size);
+        nameHashes = new bytes32[](size);
+        activeFlags = new bool[](size);
+        for (uint256 i; i < size;) {
+            uint256 id = _allEntryIds[offset + i];
+            ids[i] = id;
+            HerbEntry storage e = herbEntries[id];
+            contributors[i] = e.contributor;
+            nameHashes[i] = e.nameHash;
+            activeFlags[i] = e.active;
+            unchecked { ++i; }
+        }
+    }
+
+    function getActiveEntryIds() external view returns (uint256[] memory) {
+        uint256[] memory all = _allEntryIds;
+        uint256 count;
+        for (uint256 i; i < all.length; i++) {
+            if (herbEntries[all[i]].active) count++;
+        }
+        uint256[] memory active = new uint256[](count);
+        uint256 j;
+        for (uint256 i; i < all.length; i++) {
+            if (herbEntries[all[i]].active) active[j++] = all[i];
+        }
+        return active;
+    }
+
+    // -------------------------------------------------------------------------
+    // REMEDY REGISTRY
+    // -------------------------------------------------------------------------
+
+    function logRemedy(bytes32 titleHash, uint256 herbEntryIdRef) external nonReentrant whenLedgerNotPaused returns (uint256 remedyId) {
+        if (titleHash == bytes32(0)) revert HRB_InvalidTitleHashForRemedy();
+        if (herbEntryIdRef == 0 || herbEntryIdRef > entryCounter) revert HRB_InvalidRemedyRef();
+        if (!herbEntries[herbEntryIdRef].active) revert HRB_EntryAlreadyRemoved();
+        if (remedyCounter >= HRB_MAX_REMEDIES) revert HRB_MaxRemediesReached();
+        remedyId = ++remedyCounter;
+        remedies[remedyId] = Remedy({
+            author: msg.sender,
+            titleHash: titleHash,
+            herbEntryIdRef: herbEntryIdRef,
+            createdAtBlock: block.number,
+            active: true
+        });
+        _remedyIds.push(remedyId);
+        _remedyIdsByAuthor[msg.sender].push(remedyId);
+        _remedyIdsByTitle[titleHash].push(remedyId);
+        emit RemedyLogged(remedyId, msg.sender, titleHash, herbEntryIdRef, block.number);
+    }
+
+    function batchLogRemedies(
+        bytes32[] calldata titleHashes,
+        uint256[] calldata herbEntryIdRefs
+    ) external nonReentrant whenLedgerNotPaused returns (uint256[] memory remedyIds) {
+        uint256 n = titleHashes.length;
+        if (n != herbEntryIdRefs.length) revert HRB_ArrayLengthMismatch();
+        if (n == 0) revert HRB_ZeroBatchSize();
+        if (n > HRB_MAX_REMEDY_BATCH) revert HRB_BatchTooLarge();
+        if (remedyCounter + n > HRB_MAX_REMEDIES) revert HRB_MaxRemediesReached();
+        remedyIds = new uint256[](n);
+        for (uint256 i; i < n;) {
+            if (titleHashes[i] == bytes32(0)) revert HRB_InvalidTitleHashForRemedy();
+            if (herbEntryIdRefs[i] == 0 || herbEntryIdRefs[i] > entryCounter) revert HRB_InvalidRemedyRef();
+            if (!herbEntries[herbEntryIdRefs[i]].active) revert HRB_EntryAlreadyRemoved();
