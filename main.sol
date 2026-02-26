@@ -150,3 +150,79 @@ contract Herbo is ReentrancyGuard, Pausable, Ownable {
         bytes32 benefitHash;
         bytes32 categoryHash;
         uint256 loggedAtBlock;
+        uint256 optionalWei;
+        bool active;
+        bytes32 noteHash;
+    }
+
+    struct CategoryInfo {
+        bytes32 labelHash;
+        uint256 entryCount;
+        uint256 registeredAtBlock;
+        bool exists;
+    }
+
+    uint256 public entryCounter;
+    uint256 public categoryCounter;
+    uint256 public vitalityPerEntry;
+    uint256 public donationFeeBps;
+    bool public ledgerPaused;
+
+    mapping(uint256 => HerbEntry) public herbEntries;
+    mapping(bytes32 => CategoryInfo) public categories;
+    mapping(address => uint256) public vitalityBalance;
+    mapping(address => uint256[]) private _entryIdsByContributor;
+    mapping(bytes32 => uint256[]) private _entryIdsByCategory;
+    uint256[] private _allEntryIds;
+    bytes32[] private _categoryHashes;
+    uint256 private _treasuryAccum;
+    uint256 private _reentrancyLock;
+
+    uint256 public remedyCounter;
+    uint256 public constant HRB_MAX_REMEDIES = 1200;
+    uint256 public constant HRB_MAX_REMEDY_BATCH = 28;
+    struct Remedy {
+        address author;
+        bytes32 titleHash;
+        uint256 herbEntryIdRef;
+        uint256 createdAtBlock;
+        bool active;
+    }
+    mapping(uint256 => Remedy) public remedies;
+    uint256[] private _remedyIds;
+    mapping(address => uint256[]) private _remedyIdsByAuthor;
+    mapping(bytes32 => uint256[]) private _remedyIdsByTitle;
+
+    uint256 public campaignCounter;
+    uint256 public constant HRB_MAX_CAMPAIGNS = 95;
+    struct Campaign {
+        uint256 startBlock;
+        uint256 endBlock;
+        uint256 entryCount;
+        bool exists;
+    }
+    mapping(uint256 => Campaign) public campaigns;
+    mapping(uint256 => uint256[]) private _campaignEntryIds;
+    mapping(uint256 => uint256) private _entryToCampaign;
+
+    // -------------------------------------------------------------------------
+    // MODIFIERS
+    // -------------------------------------------------------------------------
+
+    modifier whenLedgerNotPaused() {
+        if (ledgerPaused) revert HRB_LedgerPaused();
+        _;
+    }
+
+    modifier onlyCurator() {
+        if (msg.sender != curator) revert HRB_NotCurator();
+        _;
+    }
+
+    modifier onlyWellnessKeeper() {
+        if (msg.sender != wellnessKeeper) revert HRB_NotWellnessKeeper();
+        _;
+    }
+
+    modifier nonReentrant() {
+        if (_reentrancyLock != 0) revert HRB_ReentrantCall();
