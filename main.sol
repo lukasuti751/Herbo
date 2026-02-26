@@ -378,3 +378,79 @@ contract Herbo is ReentrancyGuard, Pausable, Ownable {
         if (n > HRB_MAX_BATCH_LOG) revert HRB_BatchTooLarge();
         if (entryCounter + n > HRB_MAX_ENTRIES) revert HRB_MaxEntriesReached();
 
+        entryIds = new uint256[](n);
+        for (uint256 i; i < n;) {
+            if (nameHashes[i] == bytes32(0)) revert HRB_InvalidNameHash();
+            if (benefitHashes[i] == bytes32(0)) revert HRB_InvalidBenefitHash();
+            if (!categories[categoryHashes[i]].exists) revert HRB_EntryNotFound();
+
+            uint256 entryId = ++entryCounter;
+            herbEntries[entryId] = HerbEntry({
+                contributor: msg.sender,
+                nameHash: nameHashes[i],
+                benefitHash: benefitHashes[i],
+                categoryHash: categoryHashes[i],
+                loggedAtBlock: block.number,
+                optionalWei: 0,
+                active: true,
+                noteHash: bytes32(0)
+            });
+            entryIds[i] = entryId;
+            _entryIdsByContributor[msg.sender].push(entryId);
+            _entryIdsByCategory[categoryHashes[i]].push(entryId);
+            _allEntryIds.push(entryId);
+            categories[categoryHashes[i]].entryCount++;
+            emit HerbLogged(entryId, msg.sender, nameHashes[i], benefitHashes[i], categoryHashes[i], block.number, 0);
+            unchecked { ++i; }
+        }
+        emit BatchHerbsLogged(entryIds, msg.sender, block.number);
+    }
+
+    // -------------------------------------------------------------------------
+    // UPDATE ENTRY (CONTRIBUTOR)
+    // -------------------------------------------------------------------------
+
+    function updateHerbBenefit(uint256 entryId, bytes32 newBenefitHash) external {
+        if (entryId == 0 || entryId > entryCounter) revert HRB_EntryNotFound();
+        HerbEntry storage e = herbEntries[entryId];
+        if (!e.active) revert HRB_EntryAlreadyRemoved();
+        if (e.contributor != msg.sender) revert HRB_NotEntryContributor();
+        if (newBenefitHash == bytes32(0)) revert HRB_InvalidBenefitHash();
+        if (newBenefitHash == e.benefitHash) revert HRB_SameBenefitHash();
+        bytes32 prev = e.benefitHash;
+        e.benefitHash = newBenefitHash;
+        emit HerbEntryUpdated(entryId, prev, newBenefitHash, block.number);
+    }
+
+    function attachWellnessNote(uint256 entryId, bytes32 noteHash) external {
+        if (entryId == 0 || entryId > entryCounter) revert HRB_EntryNotFound();
+        HerbEntry storage e = herbEntries[entryId];
+        if (!e.active) revert HRB_EntryAlreadyRemoved();
+        if (e.contributor != msg.sender) revert HRB_NotEntryContributor();
+        if (noteHash == bytes32(0)) revert HRB_InvalidNoteHash();
+        e.noteHash = noteHash;
+        emit WellnessNoteAttached(entryId, noteHash, block.number);
+    }
+
+    // -------------------------------------------------------------------------
+    // VITALITY (CURATOR CREDITS)
+    // -------------------------------------------------------------------------
+
+    function creditVitality(address recipient, uint256 amount) external onlyCurator nonReentrant {
+        if (recipient == address(0)) revert HRB_ZeroAddress();
+        if (amount == 0) revert HRB_ZeroAmount();
+        vitalityBalance[recipient] += amount;
+        emit VitalityCredited(recipient, amount, vitalityBalance[recipient], block.number);
+    }
+
+    function batchCreditVitality(
+        address[] calldata recipients,
+        uint256[] calldata amounts
+    ) external onlyCurator nonReentrant {
+        uint256 n = recipients.length;
+        if (n != amounts.length) revert HRB_ArrayLengthMismatch();
+        if (n == 0) revert HRB_ZeroBatchSize();
+        if (n > HRB_MAX_BATCH_CREDIT) revert HRB_BatchTooLarge();
+        for (uint256 i; i < n;) {
+            if (recipients[i] != address(0) && amounts[i] > 0) {
+                vitalityBalance[recipients[i]] += amounts[i];
