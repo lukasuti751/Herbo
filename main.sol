@@ -986,3 +986,79 @@ contract Herbo is ReentrancyGuard, Pausable, Ownable {
     }
 
     function getConstants() external pure returns (
+        uint256 bpsBase,
+        uint256 maxFeeBps,
+        uint256 maxEntries,
+        uint256 maxCategories,
+        uint256 maxBatchLog,
+        uint256 maxBatchCredit,
+        uint256 vitalityScale,
+        uint256 maxRemedies,
+        uint256 maxRemedyBatch,
+        uint256 maxCampaigns
+    ) {
+        return (
+            HRB_BPS_BASE,
+            HRB_MAX_FEE_BPS,
+            HRB_MAX_ENTRIES,
+            HRB_MAX_CATEGORIES,
+            HRB_MAX_BATCH_LOG,
+            HRB_MAX_BATCH_CREDIT,
+            HRB_VITALITY_SCALE,
+            HRB_MAX_REMEDIES,
+            HRB_MAX_REMEDY_BATCH,
+            HRB_MAX_CAMPAIGNS
+        );
+    }
+
+    function getActiveCampaignIds() external view returns (uint256[] memory) {
+        uint256 count;
+        for (uint256 i = 1; i <= campaignCounter; i++) {
+            Campaign storage c = campaigns[i];
+            if (c.exists && block.number >= c.startBlock && block.number <= c.endBlock) count++;
+        }
+        uint256[] memory active = new uint256[](count);
+        uint256 j;
+        for (uint256 i = 1; i <= campaignCounter; i++) {
+            Campaign storage c = campaigns[i];
+            if (c.exists && block.number >= c.startBlock && block.number <= c.endBlock) active[j++] = i;
+        }
+        return active;
+    }
+
+    function getCampaignStats(uint256 campaignId) external view returns (
+        uint256 startBlock,
+        uint256 endBlock,
+        uint256 entryCount,
+        bool exists,
+        bool activeNow
+    ) {
+        if (campaignId == 0 || campaignId > campaignCounter) revert HRB_CampaignNotFound();
+        Campaign storage c = campaigns[campaignId];
+        activeNow = c.exists && block.number >= c.startBlock && block.number <= c.endBlock;
+        return (c.startBlock, c.endBlock, c.entryCount, c.exists, activeNow);
+    }
+
+    function getEntriesByCategoryPaginated(bytes32 categoryHash, uint256 offset, uint256 limit) external view returns (
+        uint256[] memory ids,
+        bytes32[] memory nameHashes,
+        bytes32[] memory benefitHashes
+    ) {
+        uint256[] memory all = _entryIdsByCategory[categoryHash];
+        uint256 len = all.length;
+        if (offset >= len) {
+            return (new uint256[](0), new bytes32[](0), new bytes32[](0));
+        }
+        uint256 end = offset + limit;
+        if (end > len) end = len;
+        uint256 size = end - offset;
+        ids = new uint256[](size);
+        nameHashes = new bytes32[](size);
+        benefitHashes = new bytes32[](size);
+        for (uint256 i; i < size;) {
+            uint256 id = all[offset + i];
+            ids[i] = id;
+            HerbEntry storage e = herbEntries[id];
+            nameHashes[i] = e.nameHash;
+            benefitHashes[i] = e.benefitHash;
+            unchecked { ++i; }
