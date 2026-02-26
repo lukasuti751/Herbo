@@ -1214,3 +1214,79 @@ contract Herbo is ReentrancyGuard, Pausable, Ownable {
 
     function hasActiveRemedyForEntry(uint256 entryId) external view returns (bool) {
         if (entryId == 0 || entryId > entryCounter) return false;
+        for (uint256 i; i < _remedyIds.length; i++) {
+            Remedy storage r = remedies[_remedyIds[i]];
+            if (r.active && r.herbEntryIdRef == entryId) return true;
+        }
+        return false;
+    }
+
+    function getRemedyIdsForEntry(uint256 entryId) external view returns (uint256[] memory remedyIds) {
+        uint256 count;
+        for (uint256 i; i < _remedyIds.length; i++) {
+            if (remedies[_remedyIds[i]].active && remedies[_remedyIds[i]].herbEntryIdRef == entryId) count++;
+        }
+        remedyIds = new uint256[](count);
+        uint256 j;
+        for (uint256 i; i < _remedyIds.length; i++) {
+            if (remedies[_remedyIds[i]].active && remedies[_remedyIds[i]].herbEntryIdRef == entryId) remedyIds[j++] = _remedyIds[i];
+        }
+    }
+
+    function getLedgerSalt() external pure returns (uint256) {
+        return HRB_LEDGER_SALT;
+    }
+
+    function getDeployBlock() external view returns (uint256) {
+        return deployBlock;
+    }
+
+    function getImmutables() external view returns (
+        address curatorAddr,
+        address treasuryAddr,
+        address wellnessKeeperAddr
+    ) {
+        return (curator, treasury, wellnessKeeper);
+    }
+
+    function getConfig() external view returns (
+        uint256 vitalityRate,
+        uint256 feeBps,
+        bool paused
+    ) {
+        return (vitalityPerEntry, donationFeeBps, ledgerPaused);
+    }
+
+    function getCounters() external view returns (
+        uint256 entries,
+        uint256 categories,
+        uint256 remedies,
+        uint256 campaigns
+    ) {
+        return (entryCounter, categoryCounter, remedyCounter, campaignCounter);
+    }
+
+    function isCategoryRegistered(bytes32 categoryHash) external view returns (bool) {
+        return categories[categoryHash].exists;
+    }
+
+    function getEntryNoteHash(uint256 entryId) external view returns (bytes32) {
+        if (entryId == 0 || entryId > entryCounter) revert HRB_EntryNotFound();
+        return herbEntries[entryId].noteHash;
+    }
+
+    function getRemedyHerbEntryRef(uint256 remedyId) external view returns (uint256) {
+        if (remedyId == 0 || remedyId > remedyCounter) revert HRB_RemedyNotFound();
+        return remedies[remedyId].herbEntryIdRef;
+    }
+
+    function getCampaignEndBlock(uint256 campaignId) external view returns (uint256) {
+        if (campaignId == 0 || campaignId > campaignCounter) revert HRB_CampaignNotFound();
+        return campaigns[campaignId].endBlock;
+    }
+
+    function getCampaignStartBlock(uint256 campaignId) external view returns (uint256) {
+        if (campaignId == 0 || campaignId > campaignCounter) revert HRB_CampaignNotFound();
+        return campaigns[campaignId].startBlock;
+    }
+
