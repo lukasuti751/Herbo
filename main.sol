@@ -910,3 +910,79 @@ contract Herbo is ReentrancyGuard, Pausable, Ownable {
             }
             if (!found) total += vitalityBalance[c];
             unchecked { ++i; }
+        }
+    }
+
+    function getTreasuryAccum() external view returns (uint256) {
+        return _treasuryAccum;
+    }
+
+    function getRemediesPaginated(uint256 offset, uint256 limit) external view returns (
+        uint256[] memory ids,
+        address[] memory authors,
+        bytes32[] memory titleHashes,
+        bool[] memory activeFlags
+    ) {
+        uint256 len = _remedyIds.length;
+        if (offset >= len) {
+            return (new uint256[](0), new address[](0), new bytes32[](0), new bool[](0));
+        }
+        uint256 end = offset + limit;
+        if (end > len) end = len;
+        uint256 size = end - offset;
+        ids = new uint256[](size);
+        authors = new address[](size);
+        titleHashes = new bytes32[](size);
+        activeFlags = new bool[](size);
+        for (uint256 i; i < size;) {
+            uint256 id = _remedyIds[offset + i];
+            ids[i] = id;
+            Remedy storage r = remedies[id];
+            authors[i] = r.author;
+            titleHashes[i] = r.titleHash;
+            activeFlags[i] = r.active;
+            unchecked { ++i; }
+        }
+    }
+
+    function getActiveRemedyIds() external view returns (uint256[] memory) {
+        uint256 count;
+        for (uint256 i; i < _remedyIds.length; i++) {
+            if (remedies[_remedyIds[i]].active) count++;
+        }
+        uint256[] memory active = new uint256[](count);
+        uint256 j;
+        for (uint256 i; i < _remedyIds.length; i++) {
+            if (remedies[_remedyIds[i]].active) active[j++] = _remedyIds[i];
+        }
+        return active;
+    }
+
+    function getRemedyWithHerb(uint256 remedyId) external view returns (
+        address author,
+        bytes32 titleHash,
+        uint256 herbEntryIdRef,
+        uint256 createdAtBlock,
+        bool active,
+        bytes32 herbNameHash,
+        bytes32 herbBenefitHash
+    ) {
+        if (remedyId == 0 || remedyId > remedyCounter) revert HRB_RemedyNotFound();
+        Remedy storage r = remedies[remedyId];
+        HerbEntry storage e = herbEntries[r.herbEntryIdRef];
+        return (
+            r.author,
+            r.titleHash,
+            r.herbEntryIdRef,
+            r.createdAtBlock,
+            r.active,
+            e.nameHash,
+            e.benefitHash
+        );
+    }
+
+    function getLedgerDomain() external view returns (bytes32) {
+        return ledgerDomain;
+    }
+
+    function getConstants() external pure returns (
