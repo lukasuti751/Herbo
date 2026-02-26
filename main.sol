@@ -1290,3 +1290,77 @@ contract Herbo is ReentrancyGuard, Pausable, Ownable {
         return campaigns[campaignId].startBlock;
     }
 
+    function getTotalDonationWei() external view returns (uint256 total) {
+        uint256[] memory ids = _allEntryIds;
+        for (uint256 i; i < ids.length; i++) {
+            total += herbEntries[ids[i]].optionalWei;
+        }
+    }
+
+    function getEntryOptionalWei(uint256 entryId) external view returns (uint256) {
+        if (entryId == 0 || entryId > entryCounter) revert HRB_EntryNotFound();
+        return herbEntries[entryId].optionalWei;
+    }
+
+    function getEntryLoggedBlock(uint256 entryId) external view returns (uint256) {
+        if (entryId == 0 || entryId > entryCounter) revert HRB_EntryNotFound();
+        return herbEntries[entryId].loggedAtBlock;
+    }
+
+    function getRemedyCreatedBlock(uint256 remedyId) external view returns (uint256) {
+        if (remedyId == 0 || remedyId > remedyCounter) revert HRB_RemedyNotFound();
+        return remedies[remedyId].createdAtBlock;
+    }
+
+    function getCategoryRegisteredBlock(bytes32 categoryHash) external view returns (uint256) {
+        if (!categories[categoryHash].exists) revert HRB_EntryNotFound();
+        return categories[categoryHash].registeredAtBlock;
+    }
+
+    function getCategoryLabel(bytes32 categoryHash) external view returns (bytes32) {
+        if (!categories[categoryHash].exists) revert HRB_EntryNotFound();
+        return categories[categoryHash].labelHash;
+    }
+
+    function getBatchEntryContributors(uint256[] calldata entryIds) external view returns (address[] memory addrs) {
+        addrs = new address[](entryIds.length);
+        for (uint256 i; i < entryIds.length; i++) {
+            if (entryIds[i] != 0 && entryIds[i] <= entryCounter) addrs[i] = herbEntries[entryIds[i]].contributor;
+        }
+    }
+
+    function getBatchRemedyAuthors(uint256[] calldata remedyIds) external view returns (address[] memory addrs) {
+        addrs = new address[](remedyIds.length);
+        for (uint256 i; i < remedyIds.length; i++) {
+            if (remedyIds[i] != 0 && remedyIds[i] <= remedyCounter) addrs[i] = remedies[remedyIds[i]].author;
+        }
+    }
+
+    function getActiveEntryIdsInCategory(bytes32 categoryHash) external view returns (uint256[] memory ids) {
+        uint256[] memory all = _entryIdsByCategory[categoryHash];
+        uint256 count;
+        for (uint256 i; i < all.length; i++) {
+            if (herbEntries[all[i]].active) count++;
+        }
+        ids = new uint256[](count);
+        uint256 j;
+        for (uint256 i; i < all.length; i++) {
+            if (herbEntries[all[i]].active) ids[j++] = all[i];
+        }
+    }
+
+    function totalCategories() external view returns (uint256) {
+        return categoryCounter;
+    }
+
+    function totalRemedies() external view returns (uint256) {
+        return remedyCounter;
+    }
+
+    function supportsInterface(bytes4) external pure returns (bool) {
+        return false;
+    }
+
+    receive() external payable {}
+}
+
