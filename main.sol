@@ -606,3 +606,79 @@ contract Herbo is ReentrancyGuard, Pausable, Ownable {
         uint256 optionalWei,
         bool active,
         bytes32 noteHash
+    ) {
+        if (entryId == 0 || entryId > entryCounter) revert HRB_EntryNotFound();
+        HerbEntry storage e = herbEntries[entryId];
+        return (
+            e.contributor,
+            e.nameHash,
+            e.benefitHash,
+            e.categoryHash,
+            e.loggedAtBlock,
+            e.optionalWei,
+            e.active,
+            e.noteHash
+        );
+    }
+
+    function getEntryIds() external view returns (uint256[] memory) {
+        return _allEntryIds;
+    }
+
+    function getEntryIdsByContributor(address contributor) external view returns (uint256[] memory) {
+        return _entryIdsByContributor[contributor];
+    }
+
+    function getEntryIdsByCategory(bytes32 categoryHash) external view returns (uint256[] memory) {
+        return _entryIdsByCategory[categoryHash];
+    }
+
+    function getCategoryHashes() external view returns (bytes32[] memory) {
+        return _categoryHashes;
+    }
+
+    function getCategoryInfo(bytes32 categoryHash) external view returns (
+        bytes32 labelHash,
+        uint256 entryCount,
+        uint256 registeredAtBlock,
+        bool exists
+    ) {
+        CategoryInfo storage c = categories[categoryHash];
+        return (c.labelHash, c.entryCount, c.registeredAtBlock, c.exists);
+    }
+
+    function getActiveEntryCount() external view returns (uint256 count) {
+        uint256[] memory ids = _allEntryIds;
+        for (uint256 i; i < ids.length;) {
+            if (herbEntries[ids[i]].active) count++;
+            unchecked { ++i; }
+        }
+    }
+
+    function getContributorStats(address contributor) external view returns (
+        uint256 totalEntries,
+        uint256 vitality
+    ) {
+        totalEntries = _entryIdsByContributor[contributor].length;
+        vitality = vitalityBalance[contributor];
+    }
+
+    function getLedgerDigest() external view returns (
+        uint256 totalEntries,
+        uint256 totalCategories,
+        uint256 treasuryAccum,
+        uint256 deployBlockNum,
+        bool paused
+    ) {
+        return (
+            entryCounter,
+            categoryCounter,
+            _treasuryAccum,
+            deployBlock,
+            ledgerPaused
+        );
+    }
+
+    function getEntriesPaginated(uint256 offset, uint256 limit) external view returns (
+        uint256[] memory ids,
+        address[] memory contributors,
