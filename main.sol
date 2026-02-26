@@ -1138,3 +1138,79 @@ contract Herbo is ReentrancyGuard, Pausable, Ownable {
     }
 
     function getVitalityForAddresses(address[] calldata addrs) external view returns (uint256[] memory amounts) {
+        amounts = new uint256[](addrs.length);
+        for (uint256 i; i < addrs.length; i++) {
+            amounts[i] = vitalityBalance[addrs[i]];
+        }
+    }
+
+    function getContributorCount() external view returns (uint256 count) {
+        uint256[] memory ids = _allEntryIds;
+        for (uint256 i; i < ids.length; i++) {
+            address c = herbEntries[ids[i]].contributor;
+            bool seen;
+            for (uint256 j; j < i; j++) {
+                if (herbEntries[ids[j]].contributor == c) { seen = true; break; }
+            }
+            if (!seen) count++;
+        }
+    }
+
+    function getEntriesWithNote() external view returns (uint256[] memory entryIds) {
+        uint256[] memory all = _allEntryIds;
+        uint256 count;
+        for (uint256 i; i < all.length; i++) {
+            if (herbEntries[all[i]].active && herbEntries[all[i]].noteHash != bytes32(0)) count++;
+        }
+        entryIds = new uint256[](count);
+        uint256 j;
+        for (uint256 i; i < all.length; i++) {
+            if (herbEntries[all[i]].active && herbEntries[all[i]].noteHash != bytes32(0)) entryIds[j++] = all[i];
+        }
+    }
+
+    function getCategoryHashesWithMinEntries(uint256 minEntries) external view returns (bytes32[] memory hashes) {
+        uint256 count;
+        for (uint256 i; i < _categoryHashes.length; i++) {
+            if (categories[_categoryHashes[i]].entryCount >= minEntries) count++;
+        }
+        hashes = new bytes32[](count);
+        uint256 j;
+        for (uint256 i; i < _categoryHashes.length; i++) {
+            if (categories[_categoryHashes[i]].entryCount >= minEntries) hashes[j++] = _categoryHashes[i];
+        }
+    }
+
+    function getRemedyCountByAuthor(address author) external view returns (uint256) {
+        return _remedyIdsByAuthor[author].length;
+    }
+
+    function getEntryCountByCategory(bytes32 categoryHash) external view returns (uint256) {
+        return categories[categoryHash].entryCount;
+    }
+
+    function getLatestEntryIds(uint256 maxCount) external view returns (uint256[] memory ids) {
+        uint256 len = _allEntryIds.length;
+        if (len == 0) return new uint256[](0);
+        if (maxCount > len) maxCount = len;
+        ids = new uint256[](maxCount);
+        for (uint256 i; i < maxCount; i++) {
+            ids[i] = _allEntryIds[len - 1 - i];
+        }
+    }
+
+    function getEntryIdsByContributorAndCategory(address contributor, bytes32 categoryHash) external view returns (uint256[] memory ids) {
+        uint256[] memory all = _entryIdsByContributor[contributor];
+        uint256 count;
+        for (uint256 i; i < all.length; i++) {
+            if (herbEntries[all[i]].active && herbEntries[all[i]].categoryHash == categoryHash) count++;
+        }
+        ids = new uint256[](count);
+        uint256 j;
+        for (uint256 i; i < all.length; i++) {
+            if (herbEntries[all[i]].active && herbEntries[all[i]].categoryHash == categoryHash) ids[j++] = all[i];
+        }
+    }
+
+    function hasActiveRemedyForEntry(uint256 entryId) external view returns (bool) {
+        if (entryId == 0 || entryId > entryCounter) return false;
