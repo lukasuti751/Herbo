@@ -302,3 +302,79 @@ contract Herbo is ReentrancyGuard, Pausable, Ownable {
         bytes32 categoryHash,
         uint256 optionalWei
     ) external payable nonReentrant whenLedgerNotPaused returns (uint256 entryId) {
+        if (nameHash == bytes32(0)) revert HRB_InvalidNameHash();
+        if (benefitHash == bytes32(0)) revert HRB_InvalidBenefitHash();
+        if (!categories[categoryHash].exists) revert HRB_EntryNotFound();
+        if (entryCounter >= HRB_MAX_ENTRIES) revert HRB_MaxEntriesReached();
+        if (msg.value != optionalWei) revert HRB_ZeroAmount();
+
+        entryId = ++entryCounter;
+        uint256 feeWei = (optionalWei * donationFeeBps) / HRB_BPS_BASE;
+        uint256 toTreasury = feeWei;
+        _treasuryAccum += toTreasury;
+
+        herbEntries[entryId] = HerbEntry({
+            contributor: msg.sender,
+            nameHash: nameHash,
+            benefitHash: benefitHash,
+            categoryHash: categoryHash,
+            loggedAtBlock: block.number,
+            optionalWei: optionalWei,
+            active: true,
+            noteHash: bytes32(0)
+        });
+
+        _entryIdsByContributor[msg.sender].push(entryId);
+        _entryIdsByCategory[categoryHash].push(entryId);
+        _allEntryIds.push(entryId);
+        categories[categoryHash].entryCount++;
+
+        emit HerbLogged(entryId, msg.sender, nameHash, benefitHash, categoryHash, block.number, optionalWei);
+        if (optionalWei > 0) emit DonationReceived(msg.sender, optionalWei, entryId, block.number);
+    }
+
+    function logHerbFree(
+        bytes32 nameHash,
+        bytes32 benefitHash,
+        bytes32 categoryHash
+    ) external nonReentrant whenLedgerNotPaused returns (uint256 entryId) {
+        if (nameHash == bytes32(0)) revert HRB_InvalidNameHash();
+        if (benefitHash == bytes32(0)) revert HRB_InvalidBenefitHash();
+        if (!categories[categoryHash].exists) revert HRB_EntryNotFound();
+        if (entryCounter >= HRB_MAX_ENTRIES) revert HRB_MaxEntriesReached();
+
+        entryId = ++entryCounter;
+        herbEntries[entryId] = HerbEntry({
+            contributor: msg.sender,
+            nameHash: nameHash,
+            benefitHash: benefitHash,
+            categoryHash: categoryHash,
+            loggedAtBlock: block.number,
+            optionalWei: 0,
+            active: true,
+            noteHash: bytes32(0)
+        });
+
+        _entryIdsByContributor[msg.sender].push(entryId);
+        _entryIdsByCategory[categoryHash].push(entryId);
+        _allEntryIds.push(entryId);
+        categories[categoryHash].entryCount++;
+
+        emit HerbLogged(entryId, msg.sender, nameHash, benefitHash, categoryHash, block.number, 0);
+    }
+
+    // -------------------------------------------------------------------------
+    // BATCH LOG
+    // -------------------------------------------------------------------------
+
+    function batchLogHerbs(
+        bytes32[] calldata nameHashes,
+        bytes32[] calldata benefitHashes,
+        bytes32[] calldata categoryHashes
+    ) external nonReentrant whenLedgerNotPaused returns (uint256[] memory entryIds) {
+        uint256 n = nameHashes.length;
+        if (n != benefitHashes.length || n != categoryHashes.length) revert HRB_ArrayLengthMismatch();
+        if (n == 0) revert HRB_ZeroBatchSize();
+        if (n > HRB_MAX_BATCH_LOG) revert HRB_BatchTooLarge();
+        if (entryCounter + n > HRB_MAX_ENTRIES) revert HRB_MaxEntriesReached();
+
