@@ -834,3 +834,79 @@ contract Herbo is ReentrancyGuard, Pausable, Ownable {
     function getEntriesInBlockRange(uint256 fromBlock, uint256 toBlock) external view returns (uint256[] memory ids) {
         if (fromBlock > toBlock) revert HRB_InvalidBlockRange();
         uint256[] memory all = _allEntryIds;
+        uint256 count;
+        for (uint256 i; i < all.length; i++) {
+            HerbEntry storage e = herbEntries[all[i]];
+            if (e.active && e.loggedAtBlock >= fromBlock && e.loggedAtBlock <= toBlock) count++;
+        }
+        ids = new uint256[](count);
+        uint256 j;
+        for (uint256 i; i < all.length; i++) {
+            HerbEntry storage e = herbEntries[all[i]];
+            if (e.active && e.loggedAtBlock >= fromBlock && e.loggedAtBlock <= toBlock) ids[j++] = all[i];
+        }
+    }
+
+    function getCategoryEntryCounts() external view returns (bytes32[] memory hashes, uint256[] memory counts) {
+        hashes = _categoryHashes;
+        counts = new uint256[](hashes.length);
+        for (uint256 i; i < hashes.length;) {
+            counts[i] = categories[hashes[i]].entryCount;
+            unchecked { ++i; }
+        }
+    }
+
+    function getContributorEntryIdsPaginated(address contributor, uint256 offset, uint256 limit) external view returns (
+        uint256[] memory ids
+    ) {
+        uint256[] memory all = _entryIdsByContributor[contributor];
+        uint256 len = all.length;
+        if (offset >= len) return new uint256[](0);
+        uint256 end = offset + limit;
+        if (end > len) end = len;
+        uint256 size = end - offset;
+        ids = new uint256[](size);
+        for (uint256 i; i < size;) {
+            ids[i] = all[offset + i];
+            unchecked { ++i; }
+        }
+    }
+
+    function getEntryBenefitHashes(uint256[] calldata entryIds) external view returns (bytes32[] memory benefitHashes) {
+        benefitHashes = new bytes32[](entryIds.length);
+        for (uint256 i; i < entryIds.length;) {
+            if (entryIds[i] != 0 && entryIds[i] <= entryCounter) {
+                benefitHashes[i] = herbEntries[entryIds[i]].benefitHash;
+            }
+            unchecked { ++i; }
+        }
+    }
+
+    function getEntryNameHashes(uint256[] calldata entryIds) external view returns (bytes32[] memory nameHashes) {
+        nameHashes = new bytes32[](entryIds.length);
+        for (uint256 i; i < entryIds.length;) {
+            if (entryIds[i] != 0 && entryIds[i] <= entryCounter) {
+                nameHashes[i] = herbEntries[entryIds[i]].nameHash;
+            }
+            unchecked { ++i; }
+        }
+    }
+
+    function hasContributorLoggedCategory(address contributor, bytes32 categoryHash) external view returns (bool) {
+        uint256[] memory ids = _entryIdsByContributor[contributor];
+        for (uint256 i; i < ids.length; i++) {
+            if (herbEntries[ids[i]].active && herbEntries[ids[i]].categoryHash == categoryHash) return true;
+        }
+        return false;
+    }
+
+    function getTotalVitalityInCirculation() external view returns (uint256 total) {
+        uint256[] memory ids = _allEntryIds;
+        for (uint256 i; i < ids.length;) {
+            address c = herbEntries[ids[i]].contributor;
+            bool found;
+            for (uint256 j; j < i; j++) {
+                if (herbEntries[ids[j]].contributor == c) { found = true; break; }
+            }
+            if (!found) total += vitalityBalance[c];
+            unchecked { ++i; }
