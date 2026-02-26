@@ -454,3 +454,79 @@ contract Herbo is ReentrancyGuard, Pausable, Ownable {
         for (uint256 i; i < n;) {
             if (recipients[i] != address(0) && amounts[i] > 0) {
                 vitalityBalance[recipients[i]] += amounts[i];
+                emit VitalityCredited(recipients[i], amounts[i], vitalityBalance[recipients[i]], block.number);
+            }
+            unchecked { ++i; }
+        }
+        emit BatchVitalityCredited(recipients, amounts, block.number);
+    }
+
+    function creditVitalityForEntry(uint256 entryId) external onlyCurator nonReentrant {
+        if (entryId == 0 || entryId > entryCounter) revert HRB_EntryNotFound();
+        HerbEntry storage e = herbEntries[entryId];
+        if (!e.active) revert HRB_EntryAlreadyRemoved();
+        address recipient = e.contributor;
+        vitalityBalance[recipient] += vitalityPerEntry;
+        emit VitalityCredited(recipient, vitalityPerEntry, vitalityBalance[recipient], block.number);
+    }
+
+    function creditVitalityForEntries(uint256[] calldata entryIds) external onlyCurator nonReentrant {
+        for (uint256 i; i < entryIds.length;) {
+            uint256 entryId = entryIds[i];
+            if (entryId != 0 && entryId <= entryCounter) {
+                HerbEntry storage e = herbEntries[entryId];
+                if (e.active) {
+                    vitalityBalance[e.contributor] += vitalityPerEntry;
+                    emit VitalityCredited(e.contributor, vitalityPerEntry, vitalityBalance[e.contributor], block.number);
+                }
+            }
+            unchecked { ++i; }
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    // SPEND VITALITY (OPTIONAL MECHANIC)
+    // -------------------------------------------------------------------------
+
+    function spendVitality(uint256 amount, bytes32 reasonHash) external nonReentrant {
+        if (amount == 0) revert HRB_ZeroAmount();
+        if (vitalityBalance[msg.sender] < amount) revert HRB_InsufficientVitality();
+        vitalityBalance[msg.sender] -= amount;
+        emit VitalitySpent(msg.sender, amount, reasonHash, block.number);
+    }
+
+    // -------------------------------------------------------------------------
+    // KEEPER (REMOVE ENTRY)
+    // -------------------------------------------------------------------------
+
+    function keeperRemoveEntry(uint256 entryId) external onlyWellnessKeeper {
+        if (entryId == 0 || entryId > entryCounter) revert HRB_EntryNotFound();
+        HerbEntry storage e = herbEntries[entryId];
+        if (!e.active) revert HRB_EntryAlreadyRemoved();
+        e.active = false;
+        if (categories[e.categoryHash].entryCount > 0) categories[e.categoryHash].entryCount--;
+        emit KeeperEntryRemoved(entryId, msg.sender, block.number);
+    }
+
+    // -------------------------------------------------------------------------
+    // CAMPAIGNS
+    // -------------------------------------------------------------------------
+
+    function createCampaign(uint256 startBlock, uint256 endBlock) external onlyCurator returns (uint256 campaignId) {
+        if (startBlock >= endBlock) revert HRB_InvalidCampaignRange();
+        if (campaignCounter >= HRB_MAX_CAMPAIGNS) revert HRB_MaxCampaignsReached();
+        campaignId = ++campaignCounter;
+        campaigns[campaignId] = Campaign({
+            startBlock: startBlock,
+            endBlock: endBlock,
+            entryCount: 0,
+            exists: true
+        });
+        emit CampaignCreated(campaignId, startBlock, endBlock, msg.sender, block.number);
+    }
+
+    function joinEntryToCampaign(uint256 entryId, uint256 campaignId) external {
+        if (entryId == 0 || entryId > entryCounter) revert HRB_EntryNotFound();
+        if (campaignId == 0 || campaignId > campaignCounter) revert HRB_CampaignNotFound();
+        HerbEntry storage e = herbEntries[entryId];
+        if (!e.active) revert HRB_EntryAlreadyRemoved();
