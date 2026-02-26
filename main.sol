@@ -530,3 +530,79 @@ contract Herbo is ReentrancyGuard, Pausable, Ownable {
         if (campaignId == 0 || campaignId > campaignCounter) revert HRB_CampaignNotFound();
         HerbEntry storage e = herbEntries[entryId];
         if (!e.active) revert HRB_EntryAlreadyRemoved();
+        if (e.contributor != msg.sender) revert HRB_NotEntryContributor();
+        if (_entryToCampaign[entryId] != 0) revert HRB_EntryAlreadyInCampaign();
+        Campaign storage c = campaigns[campaignId];
+        if (!c.exists) revert HRB_CampaignNotFound();
+        if (block.number < c.startBlock || block.number > c.endBlock) revert HRB_CampaignNotActive();
+        _entryToCampaign[entryId] = campaignId;
+        _campaignEntryIds[campaignId].push(entryId);
+        c.entryCount++;
+        emit EntryJoinedCampaign(entryId, campaignId, block.number);
+    }
+
+    function getCampaign(uint256 campaignId) external view returns (
+        uint256 startBlock,
+        uint256 endBlock,
+        uint256 entryCount,
+        bool exists
+    ) {
+        if (campaignId == 0 || campaignId > campaignCounter) revert HRB_CampaignNotFound();
+        Campaign storage c = campaigns[campaignId];
+        return (c.startBlock, c.endBlock, c.entryCount, c.exists);
+    }
+
+    function getCampaignEntryIds(uint256 campaignId) external view returns (uint256[] memory) {
+        if (campaignId == 0 || campaignId > campaignCounter) revert HRB_CampaignNotFound();
+        return _campaignEntryIds[campaignId];
+    }
+
+    function getEntryCampaign(uint256 entryId) external view returns (uint256 campaignId) {
+        if (entryId == 0 || entryId > entryCounter) revert HRB_EntryNotFound();
+        return _entryToCampaign[entryId];
+    }
+
+    function isCampaignActive(uint256 campaignId) external view returns (bool) {
+        if (campaignId == 0 || campaignId > campaignCounter) return false;
+        Campaign storage c = campaigns[campaignId];
+        return c.exists && block.number >= c.startBlock && block.number <= c.endBlock;
+    }
+
+    // -------------------------------------------------------------------------
+    // TREASURY
+    // -------------------------------------------------------------------------
+
+    function sweepTreasury() external nonReentrant {
+        uint256 amount = _treasuryAccum;
+        if (amount == 0) return;
+        _treasuryAccum = 0;
+        (bool ok,) = treasury.call{value: amount}("");
+        if (!ok) revert HRB_TransferFailed();
+        emit TreasurySwept(amount, treasury, block.number);
+    }
+
+    function withdrawExcessToTreasury(uint256 amountWei) external onlyOwner nonReentrant {
+        if (amountWei == 0) revert HRB_ZeroAmount();
+        uint256 bal = address(this).balance;
+        uint256 reserved = _treasuryAccum;
+        if (bal <= reserved) return;
+        uint256 available = bal - reserved;
+        if (amountWei > available) amountWei = available;
+        (bool ok,) = treasury.call{value: amountWei}("");
+        if (!ok) revert HRB_TransferFailed();
+        emit TreasurySwept(amountWei, treasury, block.number);
+    }
+
+    // -------------------------------------------------------------------------
+    // VIEWS
+    // -------------------------------------------------------------------------
+
+    function getEntry(uint256 entryId) external view returns (
+        address contributor,
+        bytes32 nameHash,
+        bytes32 benefitHash,
+        bytes32 categoryHash,
+        uint256 loggedAtBlock,
+        uint256 optionalWei,
+        bool active,
+        bytes32 noteHash
