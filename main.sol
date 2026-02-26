@@ -226,3 +226,79 @@ contract Herbo is ReentrancyGuard, Pausable, Ownable {
 
     modifier nonReentrant() {
         if (_reentrancyLock != 0) revert HRB_ReentrantCall();
+        _reentrancyLock = 1;
+        _;
+        _reentrancyLock = 0;
+    }
+
+    // -------------------------------------------------------------------------
+    // CONSTRUCTOR
+    // -------------------------------------------------------------------------
+
+    constructor() {
+        curator = address(0x3E7a9C2d4F6b8A0c2E4f6A8b0C2d4E6f8A0b2C4d6);
+        treasury = address(0x5B9d1F3a5C7e9B1d3F5a7C9e1B3d5F7a9C1e3B5d7);
+        wellnessKeeper = address(0x7C0e2A4b6D8f0B2d4F6a8C0e2B4d6F8a0C2e4B6f8);
+        deployBlock = block.number;
+        ledgerDomain = keccak256(abi.encodePacked("Herbo_Ledger", block.chainid, block.prevrandao, HRB_LEDGER_SALT));
+        if (curator == address(0) || treasury == address(0) || wellnessKeeper == address(0)) revert HRB_ZeroAddress();
+        vitalityPerEntry = 100 * HRB_VITALITY_SCALE;
+        donationFeeBps = 80;
+    }
+
+    // -------------------------------------------------------------------------
+    // ADMIN
+    // -------------------------------------------------------------------------
+
+    function setLedgerPaused(bool paused) external onlyOwner {
+        ledgerPaused = paused;
+        emit LedgerPaused(paused, block.number);
+    }
+
+    function setVitalityPerEntry(uint256 newVitalityPerEntry) external onlyOwner {
+        uint256 prev = vitalityPerEntry;
+        vitalityPerEntry = newVitalityPerEntry;
+        emit VitalityRateSet(prev, newVitalityPerEntry, block.number);
+    }
+
+    function setDonationFeeBps(uint256 newFeeBps) external onlyOwner {
+        if (newFeeBps > HRB_MAX_FEE_BPS) revert HRB_InvalidVitalityRate();
+        donationFeeBps = newFeeBps;
+    }
+
+    // -------------------------------------------------------------------------
+    // CATEGORY REGISTRATION
+    // -------------------------------------------------------------------------
+
+    function registerCategory(bytes32 categoryHash, bytes32 labelHash) external onlyCurator whenLedgerNotPaused {
+        if (categoryHash == bytes32(0)) revert HRB_InvalidCategoryHash();
+        if (categories[categoryHash].exists) revert HRB_CategoryAlreadyExists();
+        if (categoryCounter >= HRB_MAX_CATEGORIES) revert HRB_MaxCategoriesReached();
+        categoryCounter++;
+        _categoryHashes.push(categoryHash);
+        categories[categoryHash] = CategoryInfo({
+            labelHash: labelHash,
+            entryCount: 0,
+            registeredAtBlock: block.number,
+            exists: true
+        });
+        emit CategoryRegistered(categoryHash, labelHash, msg.sender, block.number);
+    }
+
+    function updateCategoryLabel(bytes32 categoryHash, bytes32 newLabelHash) external onlyCurator {
+        if (!categories[categoryHash].exists) revert HRB_EntryNotFound();
+        bytes32 prev = categories[categoryHash].labelHash;
+        categories[categoryHash].labelHash = newLabelHash;
+        emit CategoryLabelChanged(categoryHash, prev, newLabelHash, block.number);
+    }
+
+    // -------------------------------------------------------------------------
+    // LOG HERB (SINGLE)
+    // -------------------------------------------------------------------------
+
+    function logHerb(
+        bytes32 nameHash,
+        bytes32 benefitHash,
+        bytes32 categoryHash,
+        uint256 optionalWei
+    ) external payable nonReentrant whenLedgerNotPaused returns (uint256 entryId) {
