@@ -1062,3 +1062,79 @@ contract Herbo is ReentrancyGuard, Pausable, Ownable {
             nameHashes[i] = e.nameHash;
             benefitHashes[i] = e.benefitHash;
             unchecked { ++i; }
+        }
+    }
+
+    function getMultipleEntries(uint256[] calldata entryIds) external view returns (
+        address[] memory contributors,
+        bytes32[] memory nameHashes,
+        bytes32[] memory benefitHashes,
+        bytes32[] memory categoryHashes,
+        bool[] memory activeFlags
+    ) {
+        uint256 n = entryIds.length;
+        contributors = new address[](n);
+        nameHashes = new bytes32[](n);
+        benefitHashes = new bytes32[](n);
+        categoryHashes = new bytes32[](n);
+        activeFlags = new bool[](n);
+        for (uint256 i; i < n;) {
+            uint256 id = entryIds[i];
+            if (id != 0 && id <= entryCounter) {
+                HerbEntry storage e = herbEntries[id];
+                contributors[i] = e.contributor;
+                nameHashes[i] = e.nameHash;
+                benefitHashes[i] = e.benefitHash;
+                categoryHashes[i] = e.categoryHash;
+                activeFlags[i] = e.active;
+            }
+            unchecked { ++i; }
+        }
+    }
+
+    function getMultipleRemedies(uint256[] calldata remedyIds) external view returns (
+        address[] memory authors,
+        bytes32[] memory titleHashes,
+        uint256[] memory herbEntryIdRefs,
+        bool[] memory activeFlags
+    ) {
+        uint256 n = remedyIds.length;
+        authors = new address[](n);
+        titleHashes = new bytes32[](n);
+        herbEntryIdRefs = new uint256[](n);
+        activeFlags = new bool[](n);
+        for (uint256 i; i < n;) {
+            uint256 id = remedyIds[i];
+            if (id != 0 && id <= remedyCounter) {
+                Remedy storage r = remedies[id];
+                authors[i] = r.author;
+                titleHashes[i] = r.titleHash;
+                herbEntryIdRefs[i] = r.herbEntryIdRef;
+                activeFlags[i] = r.active;
+            }
+            unchecked { ++i; }
+        }
+    }
+
+    function getEntryCountInBlock(uint256 blockNum) external view returns (uint256 count) {
+        uint256[] memory ids = _allEntryIds;
+        for (uint256 i; i < ids.length; i++) {
+            if (herbEntries[ids[i]].loggedAtBlock == blockNum && herbEntries[ids[i]].active) count++;
+        }
+    }
+
+    function getFirstAndLastLoggedBlocks() external view returns (uint256 firstBlock, uint256 lastBlock) {
+        uint256[] memory ids = _allEntryIds;
+        if (ids.length == 0) return (0, 0);
+        firstBlock = type(uint256).max;
+        lastBlock = 0;
+        for (uint256 i; i < ids.length; i++) {
+            if (!herbEntries[ids[i]].active) continue;
+            uint256 b = herbEntries[ids[i]].loggedAtBlock;
+            if (b < firstBlock) firstBlock = b;
+            if (b > lastBlock) lastBlock = b;
+        }
+        if (firstBlock == type(uint256).max) firstBlock = 0;
+    }
+
+    function getVitalityForAddresses(address[] calldata addrs) external view returns (uint256[] memory amounts) {
