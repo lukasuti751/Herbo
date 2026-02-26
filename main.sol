@@ -758,3 +758,79 @@ contract Herbo is ReentrancyGuard, Pausable, Ownable {
             if (titleHashes[i] == bytes32(0)) revert HRB_InvalidTitleHashForRemedy();
             if (herbEntryIdRefs[i] == 0 || herbEntryIdRefs[i] > entryCounter) revert HRB_InvalidRemedyRef();
             if (!herbEntries[herbEntryIdRefs[i]].active) revert HRB_EntryAlreadyRemoved();
+            uint256 remedyId = ++remedyCounter;
+            remedies[remedyId] = Remedy({
+                author: msg.sender,
+                titleHash: titleHashes[i],
+                herbEntryIdRef: herbEntryIdRefs[i],
+                createdAtBlock: block.number,
+                active: true
+            });
+            remedyIds[i] = remedyId;
+            _remedyIds.push(remedyId);
+            _remedyIdsByAuthor[msg.sender].push(remedyId);
+            _remedyIdsByTitle[titleHashes[i]].push(remedyId);
+            emit RemedyLogged(remedyId, msg.sender, titleHashes[i], herbEntryIdRefs[i], block.number);
+            unchecked { ++i; }
+        }
+        emit BatchRemediesLogged(remedyIds, msg.sender, block.number);
+    }
+
+    function updateRemedyTitle(uint256 remedyId, bytes32 newTitleHash) external {
+        if (remedyId == 0 || remedyId > remedyCounter) revert HRB_RemedyNotFound();
+        Remedy storage r = remedies[remedyId];
+        if (!r.active) revert HRB_RemedyAlreadyRemoved();
+        if (r.author != msg.sender) revert HRB_NotRemedyAuthor();
+        if (newTitleHash == bytes32(0)) revert HRB_InvalidTitleHashForRemedy();
+        bytes32 prev = r.titleHash;
+        r.titleHash = newTitleHash;
+        emit RemedyTitleUpdated(remedyId, prev, newTitleHash, block.number);
+    }
+
+    function removeRemedy(uint256 remedyId) external {
+        if (remedyId == 0 || remedyId > remedyCounter) revert HRB_RemedyNotFound();
+        Remedy storage r = remedies[remedyId];
+        if (!r.active) revert HRB_RemedyAlreadyRemoved();
+        if (r.author != msg.sender && msg.sender != wellnessKeeper) revert HRB_NotRemedyAuthor();
+        r.active = false;
+        emit RemedyRemoved(remedyId, msg.sender, block.number);
+    }
+
+    function getRemedy(uint256 remedyId) external view returns (
+        address author,
+        bytes32 titleHash,
+        uint256 herbEntryIdRef,
+        uint256 createdAtBlock,
+        bool active
+    ) {
+        if (remedyId == 0 || remedyId > remedyCounter) revert HRB_RemedyNotFound();
+        Remedy storage r = remedies[remedyId];
+        return (r.author, r.titleHash, r.herbEntryIdRef, r.createdAtBlock, r.active);
+    }
+
+    function getRemedyIds() external view returns (uint256[] memory) {
+        return _remedyIds;
+    }
+
+    function getRemedyIdsByAuthor(address author) external view returns (uint256[] memory) {
+        return _remedyIdsByAuthor[author];
+    }
+
+    function getRemedyIdsByTitle(bytes32 titleHash) external view returns (uint256[] memory) {
+        return _remedyIdsByTitle[titleHash];
+    }
+
+    function getActiveRemedyCount() external view returns (uint256 count) {
+        for (uint256 i; i < _remedyIds.length;) {
+            if (remedies[_remedyIds[i]].active) count++;
+            unchecked { ++i; }
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    // EXTRA VIEWS (BLOCK RANGE, CATEGORY STATS, AGGREGATES)
+    // -------------------------------------------------------------------------
+
+    function getEntriesInBlockRange(uint256 fromBlock, uint256 toBlock) external view returns (uint256[] memory ids) {
+        if (fromBlock > toBlock) revert HRB_InvalidBlockRange();
+        uint256[] memory all = _allEntryIds;
